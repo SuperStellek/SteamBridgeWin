@@ -1,0 +1,56 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main, "feature/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-build.txt
+      - run: python -m pytest -q
+      - name: Download SDL3 runtime
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod "https://api.github.com/repos/libsdl-org/SDL/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match '^SDL3-.*-win32-x64\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw "SDL3 Windows x64 ZIP unavailable" }
+          Invoke-WebRequest $asset.browser_download_url -OutFile sdl.zip
+          Expand-Archive sdl.zip -DestinationPath sdl-dist
+          $dll = Get-ChildItem sdl-dist -Filter SDL3.dll -Recurse | Select-Object -First 1
+          if (-not $dll) { throw "SDL3.dll missing" }
+          Copy-Item $dll.FullName SDL3.dll
+      - name: Build application and detached updater
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onedir --name SteamBridgeWin --add-binary "SDL3.dll;." --collect-all vgamepad run.py
+          pyinstaller --noconfirm --clean --onefile --console --name SteamBridgeUpdater steambridge/install_update.py
+          Copy-Item dist/SteamBridgeUpdater.exe dist/SteamBridgeWin/SteamBridgeUpdater.exe
+          Copy-Item README.md dist/SteamBridgeWin/README.md
+          Compress-Archive -Path dist/SteamBridgeWin/* -DestinationPath SteamBridgeWin-windows-x64.zip
+          $digest = (Get-FileHash SteamBridgeWin-windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$digest  SteamBridgeWin-windows-x64.zip" | Set-Content -NoNewline SteamBridgeWin-windows-x64.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SteamBridgeWin-windows-x64
+          path: |
+            SteamBridgeWin-windows-x64.zip
+            SteamBridgeWin-windows-x64.zip.sha256
+      - name: Publish release on version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" SteamBridgeWin-windows-x64.zip SteamBridgeWin-windows-x64.zip.sha256 --generate-notes
