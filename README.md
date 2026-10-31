@@ -33,7 +33,6 @@ The GitHub Actions Windows build runs tests, packages the SDL3 runtime and stand
 - 2015 touchpad clicks rely on SDL's touch-pressure convention. Trigger digital clicks are approximated by analog thresholds; verify on physical hardware.
 - Single controller. Full Steam Input action layers, radial menus, touch gestures and native HD haptic scripting are not implemented.
 - Compatibility with newer Steam Controllers and with anti-cheat games is not guaranteed.
-- No physical controller testing yet. LED and haptic feedback depend on SDL3 firmware support.
 - Automatic updates need a writable extracted installation, and a release must be published first.
 
 Project source is MIT-licensed. SDL3 is zlib-licensed; vgamepad and ViGEmBus are separately maintained.
